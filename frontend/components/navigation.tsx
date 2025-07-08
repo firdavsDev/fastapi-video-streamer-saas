@@ -3,17 +3,19 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { 
-  Video, 
-  Search, 
-  Upload, 
-  Settings, 
-  User, 
-  LogOut, 
-  Menu, 
+import { ThemeToggle } from '@/components/theme-toggle';
+
+import {
+  Video,
+  Search,
+  Upload,
+  Settings,
+  User,
+  LogOut,
+  Menu,
   X,
   Home,
-  BarChart3 
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,8 +68,9 @@ export function Navigation() {
               <Video className="h-8 w-8 text-primary" />
               <span className="font-bold text-xl">VideoStream</span>
             </Link>
-            
+
             <div className="flex items-center space-x-4">
+              <ThemeToggle />
               <Link href="/auth/login">
                 <Button variant="outline">Sign In</Button>
               </Link>
@@ -124,6 +127,8 @@ export function Navigation() {
           {/* User Menu */}
           <div className="flex items-center space-x-4">
             {/* Mobile Menu Button */}
+            <ThemeToggle />
+
             <Button
               variant="ghost"
               size="sm"

@@ -152,12 +152,13 @@ export function PublicLinkModal({ isOpen, onClose, videoId, videoTitle }: Public
             Generate Public Link
           </DialogTitle>
           <DialogDescription>
-            Create a shareable link for "{videoTitle}" that can be accessed without authentication
+            Create a shareable link for {videoTitle} that can be accessed without authentication
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Generate New Link Form */}
+          
           <Card>
             <CardHeader>
               <CardTitle>Create New Link</CardTitle>
