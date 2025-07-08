@@ -1,0 +1,277 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: video_streaming_api
+    ports:
+      - "8000:8000"
+    # environment:
+    #   - DATABASE_URL=${DATABASE_URL}
+    #   - REDIS_URL=${REDIS_URL}
+    #   - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+    #   - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+    #   - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+    #   - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+    #   - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+    #   - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
+    #   - MINIO_SECURE=${MINIO_SECURE}
+    #   - DEBUG=${DEBUG}
+    #   - ENVIRONMENT=${ENVIRONMENT}
+    #   - SECRET_KEY=${SECRET_KEY}
+    #   - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+    #   - CORS_ORIGINS=${CORS_ORIGINS}
+    #   - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE}
+    #   - ADMIN_USERNAME=${ADMIN_USERNAME}
+    #   - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    volumes:
+      - ../logs:/app/logs
+      - ../uploads:/app/uploads
+    depends_on:
+      - postgres
+      # - redis
+      # - minio
+    networks:
+      - video_streaming_network
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    env_file:
+      - ../.env
+
+  # 🐘 PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: video_streaming_postgres
+    # environment:
+    #   - POSTGRES_DB=${POSTGRES_DB}
+    #   - POSTGRES_USER=${POSTGRES_USER}
+    #   - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - video_streaming_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file:
+      - ../.env
+
+  # 🔄 Celery Worker
+  # celery_worker:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker/Dockerfile
+  #   container_name: video_streaming_worker
+  #   command: celery -A celery_worker.tasks worker --loglevel=info --concurrency=2
+  #   environment:
+  #     - DATABASE_URL=${DATABASE_URL}
+  #     - REDIS_URL=${REDIS_URL}
+  #     - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+  #     - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+  #     - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+  #     - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+  #     - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+  #     - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
+  #     - MINIO_SECURE=${MINIO_SECURE}
+  #     - SECRET_KEY=${SECRET_KEY}
+  #     - ENABLE_VIDEO_THUMBNAILS=${ENABLE_VIDEO_THUMBNAILS}
+  #     - THUMBNAIL_QUALITY=${THUMBNAIL_QUALITY}
+  #   volumes:
+  #     - ../logs:/app/logs
+  #     - ../uploads:/app/uploads
+  #     - /tmp:/tmp
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #     - minio
+  #   networks:
+  #     - video_streaming_network
+  #   restart: unless-stopped
+
+  # # 🌸 Celery Beat (Scheduler)
+  # celery_beat:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker/Dockerfile
+  #   container_name: video_streaming_beat
+  #   command: celery -A celery_worker.tasks beat --loglevel=info
+  #   environment:
+  #     - DATABASE_URL=${DATABASE_URL}
+  #     - REDIS_URL=${REDIS_URL}
+  #     - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+  #     - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+  #     - SECRET_KEY=${SECRET_KEY}
+  #   volumes:
+  #     - ../logs:/app/logs
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   networks:
+  #     - video_streaming_network
+  #   restart: unless-stopped
+
+  # # 🌺 Celery Flower (Monitoring)
+  # celery_flower:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker/Dockerfile
+  #   container_name: video_streaming_flower
+  #   command: celery -A celery_worker.tasks flower --port=5555
+  #   ports:
+  #     - "5555:5555"
+  #   environment:
+  #     - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+  #     - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+  #   depends_on:
+  #     - redis
+  #   networks:
+  #     - video_streaming_network
+  #   restart: unless-stopped
+
+
+  # 🚀 Redis Cache & Message Broker
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: video_streaming_redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - video_streaming_network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 3
+  #   command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  # # 🗄️ MinIO Object Storage
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: video_streaming_minio
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   environment:
+  #     - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+  #     - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+  #   volumes:
+  #     - minio_data:/data
+  #   networks:
+  #     - video_streaming_network
+  #   restart: unless-stopped
+  #   command: server /data --console-address ":9001"
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+  #     interval: 30s
+  #     timeout: 20s
+  #     retries: 3
+
+  # # 📊 MinIO Client (for bucket initialization)
+  # minio_init:
+  #   image: minio/mc:latest
+  #   container_name: video_streaming_minio_init
+  #   depends_on:
+  #     - minio
+  #   networks:
+  #     - video_streaming_network
+  #   environment:
+  #     - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+  #     - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+  #     - MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}
+  #   entrypoint: >
+  #     /bin/sh -c "
+  #     sleep 10;
+  #     /usr/bin/mc alias set myminio http://minio:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY;
+  #     /usr/bin/mc mb myminio/$MINIO_BUCKET_NAME --ignore-existing;
+  #     /usr/bin/mc policy set public myminio/$MINIO_BUCKET_NAME;
+  #     echo 'MinIO buckets initialized successfully';
+  #     "
+
+  # # 🔍 Nginx Reverse Proxy
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: video_streaming_nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf
+  #     - ./ssl:/etc/nginx/ssl
+  #   depends_on:
+  #     - api
+  #   networks:
+  #     - video_streaming_network
+  #   restart: unless-stopped
+
+  # 📈 Prometheus (Monitoring)
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: video_streaming_prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus_data:/prometheus
+  #   networks:
+  #     - video_streaming_network
+  #   restart: unless-stopped
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #     - '--web.console.libraries=/etc/prometheus/console_libraries'
+  #     - '--web.console.templates=/etc/prometheus/consoles'
+  #     - '--web.enable-lifecycle'
+
+  # 📊 Grafana (Dashboards)
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: video_streaming_grafana
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #     - ./grafana/provisioning:/etc/grafana/provisioning
+  #   networks:
+  #     - video_streaming_network
+  #   restart: unless-stopped
+
+# 🌐 Networks
+networks:
+  video_streaming_network:
+    driver: bridge
+
+
+# 💾 Volumes
+volumes:
+  postgres_data:
+    driver: local
+  # redis_data:
+  #   driver: local
+  # minio_data:
+  #   driver: local
+  # prometheus_data:
+  #   driver: local
+  # grafana_data:
+  #   driver: local
+
+# 🏷️ Labels for easier management
+x-common-labels: &common-labels
+  project: "video-streaming-backend"
+  environment: "development"
+  version: "1.0.0"
