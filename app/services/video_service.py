@@ -12,6 +12,7 @@ import cv2
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.sql import text
 
 from app.core.config import settings
 from app.core.security import SecurityManager
@@ -90,20 +91,26 @@ class VideoService:
         search: Optional[str] = None,
     ) -> List[Video]:
         """Get list of videos with filtering"""
-        query = select(Video)
+        try:
+            query = select(Video)
 
-        # Apply filters
-        if status:
-            query = query.where(Video.status == status)
+            # Apply filters
+            if status:
+                query = query.where(Video.status == status)
 
-        if search:
-            query = query.where(Video.title.ilike(f"%{search}%"))
+            if search:
+                query = query.where(Video.title.ilike(f"%{search}%"))
 
-        # Apply pagination and ordering
-        query = query.order_by(Video.created_at.desc()).offset(skip).limit(limit)
+            # Apply pagination and ordering
+            query = query.order_by(Video.created_at.desc()).offset(skip).limit(limit)
 
-        result = await self.db.execute(query)
-        return result.scalars().all()
+            result = await self.db.execute(query)
+            return result.scalars().all()
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve videos: {str(e)}",
+            )
 
     async def upload_video_file(
         self, video: Video, file: UploadFile, chunk_size: int = 8192
@@ -568,51 +575,58 @@ class VideoAnalyticsService:
         }
 
     async def get_top_videos(
-        self, limit: int = 10, metric: str = "views", days: int = 30
+        self, limit: int = 10, days: int = 30
     ) -> List[Dict[str, Any]]:
         """Get top performing videos"""
+        try:
+            # Calculate date range
+            end_date = datetime.now(datetime.timezone.utc)
+            start_date = end_date - timedelta(days=days)
 
-        # Calculate date range
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=days)
+            # Get videos with view counts
+            query = text(
+                """
+            SELECT 
+                v.id,
+                v.title,
+                v.duration,
+                v.created_at,
+                COUNT(vs.id) as view_count,
+                COUNT(DISTINCT vs.user_id) as unique_viewers,
+                SUM(vs.watch_duration) as total_watch_time,
+                AVG(vs.completion_percentage) as avg_completion
+            FROM videos v
+            LEFT JOIN video_view_sessions vs ON v.id = vs.video_id
+            WHERE v.status = 'completed'
+            AND (vs.created_at >= :start_date OR vs.created_at IS NULL)
+            GROUP BY v.id, v.title, v.duration, v.created_at
+            ORDER BY view_count DESC
+            LIMIT :limit
+            """
+            )
 
-        # Get videos with view counts
-        query = """
-        SELECT 
-            v.id,
-            v.title,
-            v.duration,
-            v.created_at,
-            COUNT(vs.id) as view_count,
-            COUNT(DISTINCT vs.user_id) as unique_viewers,
-            SUM(vs.watch_duration) as total_watch_time,
-            AVG(vs.completion_percentage) as avg_completion
-        FROM videos v
-        LEFT JOIN video_view_sessions vs ON v.id = vs.video_id
-        WHERE v.status = 'completed'
-        AND (vs.created_at >= :start_date OR vs.created_at IS NULL)
-        GROUP BY v.id, v.title, v.duration, v.created_at
-        ORDER BY view_count DESC
-        LIMIT :limit
-        """
+            result = await self.db.execute(
+                query, {"start_date": start_date, "limit": limit}
+            )
 
-        result = await self.db.execute(
-            query, {"start_date": start_date, "limit": limit}
-        )
-
-        return [
-            {
-                "video_id": row.id,
-                "title": row.title,
-                "view_count": row.view_count,
-                "unique_viewers": row.unique_viewers,
-                "total_watch_time_hours": round((row.total_watch_time or 0) / 3600, 2),
-                "avg_completion_rate": round(row.avg_completion or 0, 2),
-                "duration_minutes": round((row.duration or 0) / 60, 2),
-                "created_at": row.created_at.isoformat(),
-            }
-            for row in result.fetchall()
-        ]
+            return [
+                {
+                    "video_id": row.id,
+                    "title": row.title,
+                    "view_count": row.view_count,
+                    "unique_viewers": row.unique_viewers,
+                    "total_watch_time_hours": round(
+                        (row.total_watch_time or 0) / 3600, 2
+                    ),
+                    "avg_completion_rate": round(row.avg_completion or 0, 2),
+                    "duration_minutes": round((row.duration or 0) / 60, 2),
+                    "created_at": row.created_at.isoformat(),
+                }
+                for row in result.fetchall()
+            ]
+        except Exception as e:
+            print(f"Error fetching top videos: {e}")
+            return [{"error": str(e)}]
 
 
 class VideoSearchService:

@@ -3,7 +3,6 @@
 Core application settings and environment variables
 """
 
-import os
 from functools import lru_cache
 from typing import List, Optional, Union
 

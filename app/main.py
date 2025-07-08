@@ -131,10 +131,6 @@ app.include_router(
     videos_router, prefix=f"{settings.API_V1_STR}/videos", tags=["videos"]
 )
 
-# Static files (for frontend examples)
-if os.path.exists("frontend"):
-    app.mount("/static", StaticFiles(directory="frontend"), name="static")
-
 
 # Health check endpoints
 @app.get("/health")

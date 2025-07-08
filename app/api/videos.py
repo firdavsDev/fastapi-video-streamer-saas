@@ -48,10 +48,7 @@ from app.services.video_service import (
 from celery_worker.tasks import generate_video_thumbnail_task, process_video_upload
 
 # Initialize router
-router = APIRouter(
-    prefix="/videos",
-    tags=["Videos"],
-)
+router = APIRouter()
 
 
 # Video Management Endpoints
@@ -491,51 +488,62 @@ async def get_dashboard_overview(
     current_user=Depends(get_current_admin),
 ):
     """Get dashboard overview data"""
+    try:
+        # Get top videos
+        top_videos = await analytics_service.get_top_videos(limit=10, days=30)
 
-    # Get top videos
-    top_videos = await analytics_service.get_top_videos(limit=10, days=30)
+        # Get recent uploads
+        recent_videos = await video_service.get_videos(skip=0, limit=5)
 
-    # Get recent uploads
-    recent_videos = await video_service.get_videos(skip=0, limit=5)
+        # Calculate summary stats
+        all_videos = await video_service.get_videos(
+            skip=0, limit=1000
+        )  # Get more for stats
 
-    # Calculate summary stats
-    all_videos = await video_service.get_videos(
-        skip=0, limit=1000
-    )  # Get more for stats
+        summary = {
+            "total_videos": len(all_videos),
+            "completed_videos": len(
+                [v for v in all_videos if v.status == VideoStatus.COMPLETED]
+            ),
+            "processing_videos": len(
+                [
+                    v
+                    for v in all_videos
+                    if v.status
+                    in [
+                        VideoStatus.PENDING,
+                        VideoStatus.UPLOADING,
+                        VideoStatus.PROCESSING,
+                    ]
+                ]
+            ),
+            "failed_videos": len(
+                [v for v in all_videos if v.status == VideoStatus.FAILED]
+            ),
+            "total_views": sum(v.view_count for v in all_videos),
+            "total_storage_mb": sum(v.file_size for v in all_videos) / (1024 * 1024),
+        }
 
-    summary = {
-        "total_videos": len(all_videos),
-        "completed_videos": len(
-            [v for v in all_videos if v.status == VideoStatus.COMPLETED]
-        ),
-        "processing_videos": len(
-            [
-                v
-                for v in all_videos
-                if v.status
-                in [VideoStatus.PENDING, VideoStatus.UPLOADING, VideoStatus.PROCESSING]
-            ]
-        ),
-        "failed_videos": len([v for v in all_videos if v.status == VideoStatus.FAILED]),
-        "total_views": sum(v.view_count for v in all_videos),
-        "total_storage_mb": sum(v.file_size for v in all_videos) / (1024 * 1024),
-    }
+        analytics = {
+            "upload_trend": "increasing",  # Would calculate from real data
+            "popular_formats": {"mp4": 75, "webm": 20, "mov": 5},
+            "avg_duration_minutes": (
+                sum(v.duration or 0 for v in all_videos) / len(all_videos) / 60
+                if all_videos
+                else 0
+            ),
+        }
 
-    analytics = {
-        "upload_trend": "increasing",  # Would calculate from real data
-        "popular_formats": {"mp4": 75, "webm": 20, "mov": 5},
-        "avg_duration_minutes": (
-            sum(v.duration or 0 for v in all_videos) / len(all_videos) / 60
-            if all_videos
-            else 0
-        ),
-    }
-
-    return DashboardOverviewResponse(
-        summary=summary,
-        top_videos=top_videos,
-        recent_uploads=[VideoResponse.from_orm(v) for v in recent_videos],
-        analytics=analytics,
-        period="last_30_days",
-        generated_at=datetime.utcnow(),
-    )
+        return DashboardOverviewResponse(
+            summary=summary,
+            # top_videos=top_videos,
+            recent_uploads=[VideoResponse.from_orm(v) for v in recent_videos],
+            analytics=analytics,
+            period="last_30_days",
+            generated_at=datetime.utcnow(),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate dashboard overview: {str(e)}",
+        )

@@ -27,12 +27,13 @@ class MinIOService:
             secure=settings.MINIO_SECURE,
         )
         self.bucket_name = settings.MINIO_BUCKET_NAME
-
-        # Initialize bucket
-        asyncio.create_task(self._ensure_bucket_exists())
+        self._bucket_checked = False
 
     async def _ensure_bucket_exists(self):
         """Ensure the bucket exists, create if it doesn't"""
+        if self._bucket_checked:
+            return
+
         try:
             # Run sync operation in thread pool
             loop = asyncio.get_event_loop()
@@ -51,12 +52,36 @@ class MinIOService:
             else:
                 print(f"✅ MinIO bucket exists: {self.bucket_name}")
 
+            self._bucket_checked = True
+
         except S3Error as e:
             print(f"❌ MinIO bucket error: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Storage initialization failed: {str(e)}",
             )
+
+    def _ensure_bucket_exists_sync(self):
+        """Synchronous version for use in Celery tasks"""
+        if self._bucket_checked:
+            return
+
+        try:
+            # Check if bucket exists
+            bucket_exists = self.client.bucket_exists(self.bucket_name)
+
+            if not bucket_exists:
+                # Create bucket
+                self.client.make_bucket(self.bucket_name)
+                print(f"✅ Created MinIO bucket: {self.bucket_name}")
+            else:
+                print(f"✅ MinIO bucket exists: {self.bucket_name}")
+
+            self._bucket_checked = True
+
+        except S3Error as e:
+            print(f"❌ MinIO bucket error: {e}")
+            raise Exception(f"Storage initialization failed: {str(e)}")
 
     async def upload_file(
         self,
@@ -66,6 +91,8 @@ class MinIOService:
         metadata: Optional[dict] = None,
     ) -> str:
         """Upload file to MinIO storage"""
+        await self._ensure_bucket_exists()
+
         try:
             # Convert bytes to BytesIO if needed
             if isinstance(data, bytes):
@@ -105,6 +132,49 @@ class MinIOService:
                 detail=f"File upload failed: {str(e)}",
             )
 
+    def upload_file_sync(
+        self,
+        object_name: str,
+        data: Union[bytes, BinaryIO],
+        content_type: str = "application/octet-stream",
+        metadata: Optional[dict] = None,
+    ) -> str:
+        """Synchronous upload for use in Celery tasks"""
+        self._ensure_bucket_exists_sync()
+
+        try:
+            # Convert bytes to BytesIO if needed
+            if isinstance(data, bytes):
+                data_stream = io.BytesIO(data)
+                length = len(data)
+            else:
+                data_stream = data
+                # For file-like objects, seek to end to get size
+                data_stream.seek(0, 2)
+                length = data_stream.tell()
+                data_stream.seek(0)
+
+            # Prepare metadata
+            if metadata is None:
+                metadata = {}
+
+            # Upload file synchronously
+            result = self.client.put_object(
+                self.bucket_name,
+                object_name,
+                data_stream,
+                length,
+                content_type,
+                metadata,
+            )
+
+            print(f"✅ Uploaded file: {object_name}")
+            return object_name
+
+        except S3Error as e:
+            print(f"❌ Upload failed for {object_name}: {e}")
+            raise Exception(f"File upload failed: {str(e)}")
+
     async def get_file_content(self, object_name: str) -> bytes:
         """Get file content from MinIO storage"""
         try:
@@ -128,6 +198,23 @@ class MinIOService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"File not found: {object_name}",
             )
+
+    def get_file_content_sync(self, object_name: str) -> bytes:
+        """Synchronous get file content for use in Celery tasks"""
+        try:
+            # Get object synchronously
+            response = self.client.get_object(self.bucket_name, object_name)
+
+            # Read content
+            content = response.read()
+            response.close()
+            response.release_conn()
+
+            return content
+
+        except S3Error as e:
+            print(f"❌ Failed to get file {object_name}: {e}")
+            raise Exception(f"File not found: {object_name}")
 
     async def get_file_stream(self, object_name: str):
         """Get file stream from MinIO storage"""
@@ -163,6 +250,17 @@ class MinIOService:
             print(f"❌ Failed to delete file {object_name}: {e}")
             return False
 
+    def delete_file_sync(self, object_name: str) -> bool:
+        """Synchronous delete for use in Celery tasks"""
+        try:
+            self.client.remove_object(self.bucket_name, object_name)
+            print(f"✅ Deleted file: {object_name}")
+            return True
+
+        except S3Error as e:
+            print(f"❌ Failed to delete file {object_name}: {e}")
+            return False
+
     async def file_exists(self, object_name: str) -> bool:
         """Check if file exists in MinIO storage"""
         try:
@@ -174,6 +272,14 @@ class MinIOService:
 
             return True
 
+        except S3Error:
+            return False
+
+    def file_exists_sync(self, object_name: str) -> bool:
+        """Synchronous file exists check for use in Celery tasks"""
+        try:
+            self.client.stat_object(self.bucket_name, object_name)
+            return True
         except S3Error:
             return False
 

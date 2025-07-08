@@ -10,8 +10,9 @@ from typing import AsyncGenerator, Optional
 from sqlalchemy import MetaData, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.sql import text
 
 from app.core.config import settings
 
@@ -26,20 +27,24 @@ if settings.DATABASE_URL.startswith("sqlite"):
         SQLALCHEMY_DATABASE_URL,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
-        echo=settings.DEBUG,
+        echo=False,
     )
 
     async_engine = create_async_engine(
         SQLALCHEMY_DATABASE_URL_ASYNC,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
-        echo=settings.DEBUG,
+        echo=False,
     )
 else:
+    print("Using PostgreSQL database configuration", SQLALCHEMY_DATABASE_URL)
+    print(
+        "Using PostgreSQL async database configuration", SQLALCHEMY_DATABASE_URL_ASYNC
+    )
     # PostgreSQL configuration
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL,
-        echo=settings.DEBUG,
+        echo=False,
         pool_pre_ping=True,
         pool_size=20,
         max_overflow=30,
@@ -47,7 +52,7 @@ else:
 
     async_engine = create_async_engine(
         SQLALCHEMY_DATABASE_URL_ASYNC,
-        echo=settings.DEBUG,
+        echo=False,
         pool_pre_ping=True,
         pool_size=20,
         max_overflow=30,
@@ -67,7 +72,7 @@ metadata = MetaData()
 
 
 # 🔄 Database Dependencies
-def get_db() -> Session:
+def get_db():
     """
     Dependency to get database session (sync)
     """
@@ -108,8 +113,13 @@ class DatabaseManager:
     @staticmethod
     async def create_tables():
         """Create all database tables"""
-        async with async_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        try:
+            async with async_engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            print("✅ Database tables created successfully")
+        except Exception as e:
+            print(f"❌ Error creating database tables: {e}")
+            raise e
 
     @staticmethod
     async def drop_tables():
@@ -128,9 +138,10 @@ class DatabaseManager:
         """Check if database connection is working"""
         try:
             async with AsyncSessionLocal() as session:
-                await session.execute("SELECT 1")
+                await session.execute(text("SELECT 1"))
                 return True
-        except Exception:
+        except Exception as e:
+            print(f"Database connection error: {e}")
             return False
 
     @staticmethod
@@ -218,7 +229,7 @@ async def health_check() -> dict:
         start_time = asyncio.get_event_loop().time()
 
         async with AsyncSessionLocal() as session:
-            result = await session.execute("SELECT 1")
+            result = await session.execute(text("SELECT 1"))
             result.scalar()
 
         end_time = asyncio.get_event_loop().time()

@@ -21,11 +21,7 @@ from app.schemas.auth import (
 from app.services.auth import ADMIN_USERS, AuthService
 
 # Initialize router
-router = APIRouter(
-    prefix="/auth",
-    tags=["Authentication"],
-    responses={404: {"description": "Not found"}},
-)
+router = APIRouter()
 
 # Security scheme
 security = HTTPBearer()

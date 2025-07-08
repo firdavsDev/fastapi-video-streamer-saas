@@ -261,7 +261,7 @@ class DashboardOverviewResponse(BaseModel):
     """Schema for dashboard overview"""
 
     summary: Dict[str, Any]
-    top_videos: List[Dict[str, Any]]
+    # top_videos: List[Dict[str, Any]]
     recent_uploads: List[VideoResponse]
     analytics: Dict[str, Any]
     period: str
