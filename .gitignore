@@ -146,3 +146,4 @@ backup/
 # Local configuration
 local_settings.py
 local_config.py
+

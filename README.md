@@ -69,7 +69,7 @@ pip install -r requirements.txt
 
 ```bash
 # Start all services (FastAPI, Celery, MinIO, Redis)
-docker-compose -f docker/docker-compose.yml up -d
+docker-compose -f docker/docker-compose.yml up --build --remove-orphans
 
 # Or run locally for development
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

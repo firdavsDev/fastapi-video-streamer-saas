@@ -216,6 +216,46 @@ services:
     env_file:
       - ../.env
 
+
+  # 📈 Prometheus (Monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: video_streaming_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - video_streaming_network
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    env_file:
+      - ../.env
+
+  # 📊 Grafana (Dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: video_streaming_grafana
+    ports:
+      - "3000:3000"
+    # environment:
+    #   - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - video_streaming_network
+    restart: unless-stopped
+    env_file:
+      - ../.env
+
+
   # # 🔍 Nginx Reverse Proxy
   # nginx:
   #   image: nginx:alpine
@@ -232,39 +272,6 @@ services:
   #     - video_streaming_network
   #   restart: unless-stopped
 
-  # 📈 Prometheus (Monitoring)
-  # prometheus:
-  #   image: prom/prometheus:latest
-  #   container_name: video_streaming_prometheus
-  #   ports:
-  #     - "9090:9090"
-  #   volumes:
-  #     - ./prometheus.yml:/etc/prometheus/prometheus.yml
-  #     - prometheus_data:/prometheus
-  #   networks:
-  #     - video_streaming_network
-  #   restart: unless-stopped
-  #   command:
-  #     - '--config.file=/etc/prometheus/prometheus.yml'
-  #     - '--storage.tsdb.path=/prometheus'
-  #     - '--web.console.libraries=/etc/prometheus/console_libraries'
-  #     - '--web.console.templates=/etc/prometheus/consoles'
-  #     - '--web.enable-lifecycle'
-
-  # 📊 Grafana (Dashboards)
-  # grafana:
-  #   image: grafana/grafana:latest
-  #   container_name: video_streaming_grafana
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
-  #   volumes:
-  #     - grafana_data:/var/lib/grafana
-  #     - ./grafana/provisioning:/etc/grafana/provisioning
-  #   networks:
-  #     - video_streaming_network
-  #   restart: unless-stopped
 
 # 🌐 Networks
 networks:
@@ -280,10 +287,10 @@ volumes:
     driver: local
   minio_data:
     driver: local
-  # prometheus_data:
-  #   driver: local
-  # grafana_data:
-  #   driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
 # 🏷️ Labels for easier management
 x-common-labels: &common-labels

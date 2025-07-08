@@ -49,15 +49,14 @@ scrape_configs:
     static_configs:
       - targets: ["nginx-exporter:9113"]
     scrape_interval: 30s
+# # Alerting configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           # - alertmanager:9093
 
-# Alerting configuration (optional)
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-          # - alertmanager:9093
-
-# Recording rules for aggregation
-rule_files:
-  - "recording_rules.yml"
-  - "alerting_rules.yml"
+# # Recording rules for aggregation
+# rule_files:
+#   - "recording_rules.yml"
+#   - "alerting_rules.yml"
